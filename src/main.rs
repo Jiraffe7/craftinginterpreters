@@ -34,7 +34,7 @@ fn run_file(path: impl AsRef<Path>) {
 fn run_prompt() {
     loop {
         print!("> ");
-        io::stdout().flush();
+        io::stdout().flush().expect("Unable to flush stdout");
         let mut line = String::new();
         let n = io::stdin()
             .read_line(&mut line)
