@@ -1,4 +1,4 @@
-use std::{mem, str::Chars};
+use std::{collections::VecDeque, mem, str::Chars};
 
 pub enum LoxError {
     ParseError { line: usize, message: String },
@@ -90,22 +90,58 @@ pub struct Token {
 }
 
 pub struct Scanner<'a> {
-    chars: itertools::PeekNth<Chars<'a>>,
+    // iterator
+    chars: Chars<'a>,
+    buf: VecDeque<char>,
+    // scanner
     tokens: Vec<Token>,
     current_string: String,
     line: usize,
 }
 
+impl Iterator for Scanner<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.buf.is_empty() {
+            self.chars.next()
+        } else {
+            self.buf.pop_front()
+        }
+    }
+}
+
+impl Scanner<'_> {
+    fn peek(&mut self) -> Option<char> {
+        if self.buf.is_empty() {
+            let c = self.chars.next()?;
+            self.buf.push_back(c);
+        }
+        self.buf.front().cloned()
+    }
+
+    fn peek_next(&mut self) -> Option<char> {
+        while self.buf.len() < 2 {
+            let c = self.chars.next()?;
+            self.buf.push_back(c);
+        }
+        self.buf.get(1).cloned()
+    }
+}
+
 impl<'a> Scanner<'a> {
     pub fn new(source: &'a str) -> Self {
         Scanner {
-            chars: itertools::peek_nth(source.chars()),
+            chars: source.chars(),
             tokens: Default::default(),
             current_string: Default::default(),
+            buf: Default::default(),
             line: 1,
         }
     }
+}
 
+impl Scanner<'_> {
     pub fn scan_tokens(mut self) -> Result<Vec<Token>, LoxError> {
         while !self.is_at_end() {
             self.scan_token()?;
@@ -121,8 +157,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn is_at_end(&mut self) -> bool {
-        // self.current >= self.len // original
-        self.chars.peek().is_none()
+        self.peek().is_none() && self.buf.is_empty()
     }
 
     fn scan_token(&mut self) -> Result<(), LoxError> {
@@ -177,7 +212,7 @@ impl<'a> Scanner<'a> {
             '/' => {
                 if self.match_char('/') {
                     // A comment goes until the end of the line.
-                    while self.chars.peek().filter(|c| **c != '\n').is_some() {
+                    while self.peek().filter(|c| *c != '\n').is_some() {
                         self.advance();
                     }
                     // ignore parsing comment
@@ -186,7 +221,10 @@ impl<'a> Scanner<'a> {
                     self.add_token(SLASH);
                 }
             }
-            ' ' | '\r' | '\t' => return Ok(()),
+            ' ' | '\r' | '\t' => {
+                self.current_string.clear();
+                return Ok(());
+            }
             '\n' => {
                 self.line += 1;
                 return Ok(());
@@ -207,9 +245,8 @@ impl<'a> Scanner<'a> {
 
     fn identifier(&mut self) -> Result<(), LoxError> {
         while self
-            .chars
             .peek()
-            .filter(|c| matches!(**c, 'a'..='z' | 'A'..='Z' | '_'| '0'..='9'))
+            .filter(|c| matches!(*c, 'a'..='z' | 'A'..='Z' | '_'| '0'..='9'))
             .is_some()
         {
             self.advance();
@@ -223,32 +260,21 @@ impl<'a> Scanner<'a> {
     }
 
     fn number(&mut self) -> Result<(), LoxError> {
-        while self
-            .chars
-            .peek()
-            .filter(|c| matches!(**c, '0'..='9'))
-            .is_some()
-        {
+        while self.peek().filter(|c| matches!(*c, '0'..='9')).is_some() {
             self.advance();
         }
 
         // Look for a fractional part
-        if self.chars.peek().filter(|c| **c == '.').is_some()
+        if self.peek().filter(|c| *c == '.').is_some()
             && self
-                .chars
-                .peek_nth(1)
-                .filter(|c| matches!(**c, '0'..='9'))
+                .peek_next()
+                .filter(|c| matches!(*c, '0'..='9'))
                 .is_some()
         {
             // Consume the "."
             self.advance();
 
-            while self
-                .chars
-                .peek()
-                .filter(|c| matches!(**c, '0'..='9'))
-                .is_some()
-            {
+            while self.peek().filter(|c| matches!(*c, '0'..='9')).is_some() {
                 self.advance();
             }
         }
@@ -258,8 +284,8 @@ impl<'a> Scanner<'a> {
     }
 
     fn string(&mut self) -> Result<(), LoxError> {
-        while self.chars.peek().filter(|c| **c != '"').is_some() {
-            if self.chars.peek().filter(|c| **c == '\n').is_some() {
+        while self.peek().filter(|c| *c != '"').is_some() {
+            if self.peek().filter(|c| *c == '\n').is_some() {
                 self.line += 1;
             }
             self.advance();
@@ -279,7 +305,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn advance(&mut self) -> Option<char> {
-        let c = self.chars.next()?;
+        let c = self.next()?;
         self.current_string.push(c);
         Some(c)
     }
@@ -297,11 +323,11 @@ impl<'a> Scanner<'a> {
         if self.is_at_end() {
             return false;
         }
-        let c = match self.chars.peek() {
+        let c = match self.peek() {
             Some(c) => c,
             None => return false,
         };
-        if *c == expected {
+        if c == expected {
             self.advance();
             true
         } else {
