@@ -93,8 +93,6 @@ pub struct Scanner<'a> {
     chars: itertools::PeekNth<Chars<'a>>,
     tokens: Vec<Token>,
     current_string: String,
-    start: usize,
-    current: usize,
     line: usize,
 }
 
@@ -104,15 +102,12 @@ impl<'a> Scanner<'a> {
             chars: itertools::peek_nth(source.chars()),
             tokens: Default::default(),
             current_string: Default::default(),
-            start: 0,
-            current: 0,
             line: 1,
         }
     }
 
     pub fn scan_tokens(mut self) -> Result<Vec<Token>, LoxError> {
         while !self.is_at_end() {
-            self.start = self.current;
             self.scan_token()?;
         }
 
@@ -284,7 +279,6 @@ impl<'a> Scanner<'a> {
     }
 
     fn advance(&mut self) -> Option<char> {
-        self.current += 1;
         let c = self.chars.next()?;
         self.current_string.push(c);
         Some(c)
@@ -308,7 +302,6 @@ impl<'a> Scanner<'a> {
             None => return false,
         };
         if *c == expected {
-            self.current += 1;
             self.advance();
             true
         } else {
