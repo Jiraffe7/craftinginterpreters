@@ -33,7 +33,7 @@ pub enum TokenType {
     // Literals
     IDENTIFIER,
     STRING,
-    NUMBER,
+    NUMBER(f64),
 
     // Keywords
     AND,
@@ -86,7 +86,6 @@ impl TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
-    pub literal: Option<()>, // how to represent object in rust?
     pub line: usize,
 }
 
@@ -120,7 +119,6 @@ impl<'a> Scanner<'a> {
         self.tokens.push(Token {
             token_type: TokenType::EOF,
             lexeme: String::from(""),
-            literal: None,
             line: self.line,
         });
 
@@ -259,7 +257,8 @@ impl<'a> Scanner<'a> {
                 self.advance();
             }
         }
-        self.add_token(TokenType::NUMBER);
+        let num: f64 = self.current_string.parse().expect("current_string not f64");
+        self.add_token(TokenType::NUMBER(num));
         Ok(())
     }
 
@@ -296,7 +295,6 @@ impl<'a> Scanner<'a> {
         self.tokens.push(Token {
             token_type,
             lexeme: text,
-            literal: None,
             line: self.line,
         });
     }
